@@ -19,8 +19,9 @@ _Avoid_: dependencies, depends-on, requires
 **Issue faite** (`## Status`):
 Une issue dont la section `## Status` vaut `done`/`fait`/`terminé` (ou `✅`/`[x]`). hachibi
 l'**écarte** de la sélection avant de planifier ; ses dépendants la traitent comme un bloqueur
-satisfait. À distinguer de `--skip` (écart ad hoc, non persistant) et du verdict **PASS** d'un
-worker (résultat d'un run, pas un état d'entrée).
+satisfait. hachibi **pose lui-même** ce marqueur sur les issues qu'il intègre (dans la branche
+d'intégration ; désactivable par `--no-mark-done`). À distinguer de `--skip` (écart ad hoc,
+non persistant) et du verdict **PASS** d'un worker (résultat d'un run, pas un état d'entrée).
 _Avoid_: done (en anglais dans la doc FR), terminée/fermée employées sans le marqueur
 
 **Wave** (Vague):

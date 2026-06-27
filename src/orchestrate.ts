@@ -139,6 +139,39 @@ function isDone(raw: string): boolean {
   return /\b(done|fait|termin\w*|complete\w*|closed|merged|int[ée]gr\w*)\b|✅|\[x\]/i.test(m[1]);
 }
 
+// Marque `## Status: done` dans les fichiers d'issues `files` (chemins absolus sous `root`),
+// au sein du worktree `intWt`, et commite. Renvoie le nombre d'issues effectivement marquées.
+export function markIssuesDone(intWt: string, root: string, files: string[]): number {
+  let marked = 0;
+  for (const file of files) {
+    const rel = file.replace(root + '/', '');
+    const target = join(intWt, rel);
+    try {
+      const next = setStatusDone(readFileSync(target, 'utf8'));
+      if (next !== null) {
+        writeFileSync(target, next);
+        git(`add "${rel}"`, intWt);
+        marked++;
+      }
+    } catch { /* fichier absent dans l'intégration : on ignore */ }
+  }
+  if (marked) git(`commit -m "chore(issues): marque ${marked} issue(s) done"`, intWt);
+  return marked;
+}
+
+// Renvoie le contenu avec `## Status: done`, ou null si déjà fait (rien à écrire).
+export function setStatusDone(raw: string): string | null {
+  if (isDone(raw)) return null;
+  // Section `## Status` existante → remplace son corps par "done".
+  const re = /(^|\n)(##\s*Status[^\n]*\n)[\s\S]*?(?=\n##\s|\n#\s|$)/i;
+  if (re.test(raw)) return raw.replace(re, (_m, pre, head) => `${pre}${head}done\n`);
+  // Sinon insère une section juste après le titre H1 (ou en tête de fichier).
+  const lines = raw.split('\n');
+  const h1 = lines.findIndex((l) => /^#\s+/.test(l));
+  lines.splice(h1 >= 0 ? h1 + 1 : 0, 0, '', '## Status', 'done');
+  return lines.join('\n');
+}
+
 function parseBlockedBy(raw: string, selfNum: number, allNums: Set<number>): number[] {
   const m = raw.match(/##\s*Blocked by\s*([\s\S]*?)(?:\n##\s|\n#\s|$)/i);
   if (!m) return [];
@@ -430,6 +463,7 @@ export async function run(opts: RunOptions = {}): Promise<void> {
       'plan-only': { type: 'boolean' },
       'no-planner': { type: 'boolean' },
       'no-merge': { type: 'boolean' },
+      'no-mark-done': { type: 'boolean' },
       'keep-worktrees': { type: 'boolean' },
       yes: { type: 'boolean' },
       help: { type: 'boolean' },
@@ -456,6 +490,7 @@ Options :
   --base <ref>           Ref de base de la branche d'intégration (défaut HEAD)
   --integration <name>   Nom de la branche d'intégration (défaut auto)
   --no-merge             Ne fusionne pas automatiquement (laisse branches + worktrees)
+  --no-mark-done         Ne marque pas "## Status: done" les issues intégrées
   --keep-worktrees       Conserve les worktrees même en cas de succès
   --config <path>        Fichier de config JSON (défaut: .hachibi/config.json)
 
@@ -590,6 +625,14 @@ satisfaite). Pour de l'ad hoc, utilise plutôt --only / --skip.
         }
       }
     }
+  }
+
+  // Marque `## Status: done` les issues intégrées — DANS la branche d'intégration (l'arbre
+  // principal n'est jamais touché). Les marqueurs arrivent quand tu fusionnes cette branche.
+  if (!values['no-merge'] && !values['no-mark-done']) {
+    const integrated = allResults.filter((r) => r.ok).map((r) => r.issue.file);
+    const marked = markIssuesDone(intWt, root, integrated);
+    if (marked) console.log(`\n🏁 ${marked} issue(s) marquée(s) \`## Status: done\` dans ${intBranch}.`);
   }
 
   // Rapport

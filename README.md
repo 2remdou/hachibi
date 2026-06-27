@@ -141,6 +141,7 @@ npx tsx .hachibi/main.ts docs/issues/paiements --yes --config config/hachibi.pro
 | `--base <ref>` | Base de la branche d'intégration (défaut `HEAD`) |
 | `--integration <name>` | Nom de la branche d'intégration (défaut auto-horodaté) |
 | `--no-merge` | Ne fusionne pas automatiquement (laisse branches + worktrees) |
+| `--no-mark-done` | Ne marque pas `## Status: done` les issues intégrées |
 | `--keep-worktrees` | Conserve les worktrees même en cas de succès |
 | `--config <path>` | Fichier de config JSON (défaut `.hachibi/config.json`) |
 
@@ -251,15 +252,19 @@ done
 
 ### Reprendre un dossier où des issues sont déjà faites
 
-Par défaut hachibi traite **tous** les `NN-*.md` du dossier. Pour qu'il en saute :
+Par défaut hachibi traite **tous** les `NN-*.md` du dossier, **mais** il marque
+automatiquement `## Status: done` les issues qu'il intègre avec succès (voir ci-dessous). Pour
+qu'il en saute :
 
 - **`## Status: done`** dans le fichier (persistant, versionné) — l'issue est ignorée, et ses
   **dépendants la considèrent comme satisfaite** (le bloqueur écarté ne bloque plus).
 - **`--only 03,04`** / **`--skip 01,02`** — sélection ad hoc à l'exécution, sans toucher aux fichiers.
 - Sinon, le **workaround zéro-config** : sors/déplace les fichiers déjà faits hors du dossier visé.
 
-> hachibi ne marque **pas** les issues `done` tout seul après intégration : c'est à toi de le
-> faire (ou d'utiliser `--skip`). Ça garde la décision « c'est fini » entre tes mains.
+**Marquage automatique.** À la fin d'un run, chaque issue **intégrée** est marquée
+`## Status: done` — **dans la branche d'intégration** (l'arbre principal n'est jamais touché).
+Les marqueurs arrivent donc dans tes fichiers **quand tu fusionnes cette branche** ; un run
+ultérieur les saute alors tout seul. Désactive avec `--no-mark-done`.
 
 ## Comment ça marche
 
