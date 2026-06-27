@@ -62,13 +62,23 @@ fusionne-la toi-même.
 
 ## Installation — 3 façons
 
-| Méthode | Commande | Quand l'utiliser |
-|---------|----------|------------------|
-| **npx à la demande** | `npx hachibi docs/issues/x` | Essai ponctuel, rien à installer |
-| **dépendance de dev** | `npm i -D hachibi` puis `npx hachibi docs/issues/x` | Usage régulier dans un projet |
-| **GitHub** | `npx github:2remdou/hachibi docs/issues/x` | Avant publication npm / version non publiée |
+> **`<issuesDir>`** (ci-dessous `docs/issues/ma-feature`) n'est pas un paramètre
+> d'installation : c'est l'**argument d'exécution** — le dossier d'issues à implémenter. La
+> commande `npx hachibi <issuesDir>` **installe ET lance** en une fois. La seule install
+> *pure* (sans rien exécuter) est `npm i -D hachibi`.
 
-En **dépendance de dev**, tu peux exposer un script dans le `package.json` de ton projet :
+| Méthode | Installer | Lancer |
+|---------|-----------|--------|
+| **npx à la demande** | rien (téléchargé au vol) | `npx hachibi docs/issues/ma-feature` |
+| **dépendance de dev** | `npm i -D hachibi` | `npx hachibi docs/issues/ma-feature` |
+| **GitHub** | rien (cloné au vol) | `npx github:2remdou/hachibi docs/issues/ma-feature` |
+
+- **npx à la demande** — essai ponctuel, rien à installer.
+- **dépendance de dev** — usage régulier : épingle la version dans ton `package.json`.
+- **GitHub** — avant publication npm, ou pour une version non publiée.
+
+En **dépendance de dev**, tu peux exposer un script dans le `package.json` de ton projet (le
+dossier d'issues est figé dans le script) :
 
 ```json
 {
@@ -80,11 +90,12 @@ En **dépendance de dev**, tu peux exposer un script dans le `package.json` de t
 
 puis `npm run issues` (plan) ou `npm run issues -- --yes` (exécution).
 
-Depuis **GitHub**, tu peux épingler une branche, un tag ou un commit :
+Depuis **GitHub**, tu peux épingler une branche, un tag ou un commit (le `#ref` porte sur la
+version de hachibi, pas sur ton dossier d'issues) :
 
 ```bash
-npx github:2remdou/hachibi#main docs/issues/x      # branche
-npx github:2remdou/hachibi#v0.1.0 docs/issues/x    # tag
+npx github:2remdou/hachibi#main docs/issues/ma-feature      # branche
+npx github:2remdou/hachibi#v0.1.0 docs/issues/ma-feature    # tag
 ```
 
 > `npx github:…` clone et **build** le package (script `prepare`, via `tsc`) : la première
