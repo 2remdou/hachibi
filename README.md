@@ -1,84 +1,80 @@
 # hachibi 🐙
 
-**Build parallèle d'issues Markdown** via worktrees git isolés + agents `claude` headless.
-Stack-agnostique, installable avec **`npx` dans n'importe quel projet git**.
+Tu as une liste de petites tâches à coder, chacune décrite dans un court fichier Markdown.
+**hachibi confie chaque tâche à un agent Claude différent, qui la code tout seul dans une
+copie isolée de ton projet — tous en même temps — puis rassemble le travail fini sur une
+seule branche** que tu n'as plus qu'à relire et fusionner.
 
-Prend un dossier de fichiers `NN-*.md` (la sortie typique de `/to-issues`) et l'implémente
-**en parallèle** : un planificateur découpe en vagues, puis chaque issue est confiée à un
-`claude` headless isolé dans son propre worktree git, qui suit la discipline
-« implement-verified » (`/tdd` → gate objectif → revue adversariale fraîche → `/review` →
-`/simplify` → commit). Les branches réussies sont fusionnées dans une branche d'intégration.
+## Ce que fait hachibi, concrètement
 
-S'insère après une chaîne locale type : `/grill-with-docs` → `/to-prd` → `/to-issues` → **`hachibi`**.
+**1. Tu fournis** un dossier de tâches : un fichier Markdown par tâche (on appelle ça une
+*issue*). Le nom commence par un numéro, et une section `## Blocked by` dit de quelles autres
+tâches elle dépend.
 
-## ⚠️ Prérequis — hachibi est un outil Claude Code
-
-hachibi **présuppose un runtime Claude Code** (il ne dégrade pas si absent — cf.
-[ADR 0002](docs/adr/0002-assumes-claude-code-runtime.md)) :
-
-- **`claude` CLI** sur le `PATH`, **authentifié dans ton terminal** : hachibi lance des
-  sous-processus `claude -p` qui réutilisent ton auth.
-- Les skills **`/tdd`, `/review`, `/simplify`** disponibles dans ton install claude — le
-  worker les invoque. (Renommables/désactivables via config, mais c'est le mode supporté.)
-- **Node ≥ 18** et le projet cible est un **dépôt git** (hachibi travaille dans des
-  worktrees ; l'arbre principal n'est **jamais** touché, tes modifs non commitées restent).
-
-## Démarrage rapide dans ton projet
-
-hachibi se lance **depuis la racine du projet git que tu veux outiller** (pas depuis hachibi
-lui-même). Flux complet, de zéro :
-
-```bash
-# 1. Place-toi dans TON projet (celui dont tu veux implémenter les issues)
-cd ~/projets/mon-app
-
-# 2. Il te faut un dossier d'issues au format NN-*.md (typiquement la sortie de /to-issues).
-#    Sinon, crée-en un à la main :
-mkdir -p docs/issues/paiements
-cat > docs/issues/paiements/01-schema-paiement.md <<'MD'
-# Schéma de paiement
-
-## Blocked by
-none
-
-## Critères d'acceptation
-- Une transaction a un montant, une devise et un statut
-MD
-
-# 3. (optionnel) Installe hachibi en dépendance de dev du projet
-npm i -D hachibi
-
-# 4. Visualise le plan de vagues — AUCUN worker lancé, totalement sûr
-npx hachibi docs/issues/paiements
-
-# 5. Quand le plan te convient, lance pour de vrai
-npx hachibi docs/issues/paiements --yes
+```
+docs/issues/paiements/
+├── 01-schema-paiement.md     →  "Créer le schéma de paiement"   (ne dépend de rien)
+├── 02-page-checkout.md       →  "Page de paiement"              (dépend de 01)
+└── 03-recu-email.md          →  "Email de reçu"                 (dépend de 01)
 ```
 
-À la fin, hachibi affiche un rapport et le nom de la **branche d'intégration** (ex.
-`orchestrate/paiements-20260627143000`) où les issues réussies ont été fusionnées — ta
-branche de travail n'a pas bougé. Revérifie cette branche (typecheck/lint/tests), puis
-fusionne-la toi-même.
+**2. hachibi travaille**, en une seule commande :
 
-## Installation — 3 façons
+- il lit les tâches et voit lesquelles dépendent des autres (ici 02 et 03 attendent 01) ;
+- il lance plusieurs **Claude en parallèle** — chacun code **une seule** tâche, seul, dans
+  **sa propre copie de ton repo** (une copie de travail git jetable), sans se marcher dessus ;
+- chaque Claude écrit le code **et les tests**, vérifie que tout passe, puis commite ;
+- hachibi rassemble tous les commits réussis sur **une seule branche**.
 
-> **`<issuesDir>`** (ci-dessous `docs/issues/ma-feature`) n'est pas un paramètre
-> d'installation : c'est l'**argument d'exécution** — le dossier d'issues à implémenter. La
-> commande `npx hachibi <issuesDir>` **installe ET lance** en une fois. La seule install
-> *pure* (sans rien exécuter) est `npm i -D hachibi`.
+**3. Tu obtiens** à la fin :
 
-| Méthode | Installer | Lancer |
-|---------|-----------|--------|
-| **npx à la demande** | rien (téléchargé au vol) | `npx hachibi docs/issues/ma-feature` |
-| **dépendance de dev** | `npm i -D hachibi` | `npx hachibi docs/issues/ma-feature` |
-| **GitHub** | rien (cloné au vol) | `npx github:2remdou/hachibi docs/issues/ma-feature` |
+- une **branche** (ex. `orchestrate/paiements-…`) avec les tâches terminées, prêtes à relire ;
+- un **rapport** : qui a réussi, qui a échoué et pourquoi ;
+- **ton code de départ intact** — hachibi n'a jamais touché ta branche de travail : tout s'est
+  passé dans des copies à part. Tu relis la branche produite, et si elle te convient, **c'est
+  toi qui fusionnes**.
 
-- **npx à la demande** — essai ponctuel, rien à installer.
-- **dépendance de dev** — usage régulier : épingle la version dans ton `package.json`.
-- **GitHub** — avant publication npm, ou pour une version non publiée.
+> En une phrase : *« code-moi ces tâches en parallèle, chacune dans son coin, et donne-moi une
+> branche à relire ».*
 
-En **dépendance de dev**, tu peux exposer un script dans le `package.json` de ton projet (le
-dossier d'issues est figé dans le script) :
+## Ce qu'il te faut
+
+- Être **dans un projet git** (hachibi travaille dans des copies de ce repo).
+- Le **CLI `claude` installé et connecté** dans ton terminal — c'est lui qui code. hachibi
+  s'appuie aussi sur tes commandes Claude `/tdd`, `/review`, `/simplify`
+  ([détails](docs/adr/0002-assumes-claude-code-runtime.md)).
+- **Node ≥ 18**.
+
+## Installer et lancer
+
+hachibi se lance **depuis ton projet** (le repo dont tu veux coder les tâches), pas depuis
+hachibi. La même commande l'installe et le lance :
+
+```bash
+cd ~/projets/mon-app                       # ← ton projet
+npx hachibi docs/issues/paiements          # affiche le PLAN (rien n'est codé) — sûr
+npx hachibi docs/issues/paiements --yes    # code pour de vrai
+```
+
+Cette commande fait deux choses d'un coup :
+
+- **`npx hachibi`** — télécharge hachibi (la 1ʳᵉ fois) **et le lance** ;
+- **`docs/issues/paiements`** — c'est l'**argument** : le dossier de tâches à coder. Ce n'est
+  pas un réglage d'installation, juste « voici quoi faire ».
+
+Sans `--yes`, hachibi montre seulement le plan et s'arrête : **commence toujours par là.**
+
+### Faut-il « installer » hachibi ?
+
+Pas forcément — `npx` le télécharge tout seul. Trois cas :
+
+| Tu veux… | Fais |
+|----------|------|
+| L'essayer une fois | rien à installer : `npx hachibi docs/issues/paiements` |
+| L'utiliser souvent dans un projet | `npm i -D hachibi` une fois, puis `npx hachibi docs/issues/paiements` |
+| Une version pas encore publiée sur npm | `npx github:2remdou/hachibi docs/issues/paiements` |
+
+En usage régulier, tu peux figer la commande dans un script de ton `package.json` :
 
 ```json
 {
@@ -88,18 +84,10 @@ dossier d'issues est figé dans le script) :
 }
 ```
 
-puis `npm run issues` (plan) ou `npm run issues -- --yes` (exécution).
+puis `npm run issues` (plan) ou `npm run issues -- --yes` (pour de vrai).
 
-Depuis **GitHub**, tu peux épingler une branche, un tag ou un commit (le `#ref` porte sur la
-version de hachibi, pas sur ton dossier d'issues) :
-
-```bash
-npx github:2remdou/hachibi#main docs/issues/ma-feature      # branche
-npx github:2remdou/hachibi#v0.1.0 docs/issues/ma-feature    # tag
-```
-
-> `npx github:…` clone et **build** le package (script `prepare`, via `tsc`) : la première
-> exécution est plus lente que via npm, et nécessite un accès au dépôt.
+> Depuis GitHub : `#ref` épingle la **version de hachibi** (`...#main`, `...#v0.1.0`), pas ton
+> dossier d'issues. Le 1ᵉʳ lancement est plus lent (hachibi est compilé à l'install).
 
 ## Exemples d'utilisation des options
 
