@@ -1,15 +1,19 @@
 {
   "name": "hachibi",
   "version": "0.1.0",
-  "description": "Build parallèle d'issues Markdown via worktrees git isolés + agents claude headless. Stack-agnostique, installable via npx. Requiert un runtime Claude Code (CLI claude + skills /tdd, /review, /simplify).",
+  "description": "Build parallèle d'issues Markdown via worktrees git isolés + agents claude headless. Scaffold .hachibi/ éditable, lancé via tsx. Requiert un runtime Claude Code (CLI claude + skills /tdd, /review, /simplify).",
   "type": "module",
   "bin": {
-    "hachibi": "dist/orchestrate.js"
+    "hachibi": "bin/hachibi.js"
+  },
+  "exports": {
+    ".": "./src/orchestrate.ts",
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "prompts",
-    "hachibi.config.example.json",
+    "bin",
+    "src",
+    "template",
     "README.md",
     "LICENSE"
   ],
@@ -17,9 +21,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc -p .",
-    "dev": "tsc -p . --watch",
-    "prepare": "npm run build"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "claude",
@@ -33,6 +35,9 @@
     "codegen"
   ],
   "license": "MIT",
+  "dependencies": {
+    "tsx": "^4.19.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"

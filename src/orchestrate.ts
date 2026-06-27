@@ -1,48 +1,38 @@
-#!/usr/bin/env node
 /**
- * hachibi — build parallèle d'issues via worktrees isolés + claude headless.
+ * hachibi — moteur de build parallèle d'issues (worktrees isolés + claude headless).
  *
- * Outil STACK-AGNOSTIQUE, installable dans n'importe quel projet :
- *   npx hachibi <issuesDir> [options]
+ * Ce module exporte `run()` ; il NE s'exécute pas tout seul à l'import. Il est consommé
+ * par le wrapper `.hachibi/main.ts` (scaffoldé par `hachibi init`) lancé via tsx :
+ *
+ *   npx tsx .hachibi/main.ts <issuesDir> [options]
+ *
+ * Le wrapper fournit `promptsDir` (= .hachibi/prompts, éditable) et `configPath`
+ * (= .hachibi/config.json). Livré en TypeScript pur, sans build : tsx le transpile, y
+ * compris depuis node_modules (cf. docs/adr/0003).
  *
  * Présuppose un runtime Claude Code (CLI `claude` + skills /tdd, /review, /simplify) :
- * cf. docs/adr/0002. Compilé TypeScript → dist/ (cf. docs/adr/0001).
- *
- * Pipeline :
- *   1. Parse les issues Markdown (<issuesDir>/NN-*.md) → DAG via "## Blocked by".
- *   2. PLANIFICATEUR : un `claude -p` lit les specs et propose des VAGUES (dépendances
- *      + contention de fichiers). Repli déterministe (tri topologique) si indisponible.
- *   3. Par vague : un worktree git isolé + install par issue, un `claude -p` worker par
- *      issue (en parallèle, borné par --max-parallel). Chaque worker suit la discipline
- *      « implement-verified » (cf. prompts/worker-prompt.md).
- *   4. MERGE AUTO : chaque branche réussie est fusionnée dans la branche d'intégration
- *      (worktree dédié, l'arbre principal n'est jamais touché). Conflits remontés.
- *
- * Sans --yes : mode plan uniquement (sûr) — affiche les vagues sans lancer de worker.
+ * cf. docs/adr/0002.
  */
 
 import { parseArgs } from 'node:util';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
-import { join, resolve, basename, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-// Racine du package installé (dossier qui contient dist/ et prompts/).
-// Au runtime ce fichier vit dans dist/, donc PKG_ROOT = dist/.. = racine du package.
-const HERE = import.meta.dirname ?? dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = resolve(HERE, '..');
-const PROMPTS_DIR = join(PKG_ROOT, 'prompts');
-
-function packageVersion(): string {
-  try {
-    return JSON.parse(readFileSync(join(PKG_ROOT, 'package.json'), 'utf8')).version || '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
+import { join, resolve, basename } from 'node:path';
 
 // ---------------------------------------------------------------------------
-// Types
+// API publique
+// ---------------------------------------------------------------------------
+export type RunOptions = {
+  /** Dossier des prompts (défaut : <repo>/.hachibi/prompts). */
+  promptsDir?: string;
+  /** Chemin du fichier de config par défaut (défaut : <repo>/.hachibi/config.json ; surchargé par --config). */
+  configPath?: string;
+  /** Arguments CLI (défaut : process.argv.slice(2)). */
+  argv?: string[];
+};
+
+// ---------------------------------------------------------------------------
+// Types internes
 // ---------------------------------------------------------------------------
 type Issue = {
   id: string; // tel quel depuis le nom de fichier, ex "01"
@@ -62,7 +52,7 @@ type Config = {
   testCmd: string;
   rulesFile: string; // chemin relatif au repo, "" si aucun
   // Modèles : `model` est le défaut global ; chaque knob ("" = hérite de `model`) cible
-  // un processus distinct que hachibi lance lui-même. Cf. ADR 0002 / grill.
+  // un processus distinct que hachibi lance lui-même.
   model: string; // défaut global (claude-sonnet-4-6)
   plannerModel: string; // planificateur (lecture seule)
   workerModel: string; // session worker (/tdd, /review, /simplify y tournent)
@@ -183,8 +173,8 @@ function fill(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in vars ? vars[k] : `{{${k}}}`));
 }
 
-function runPlanner(issues: Issue[], cfg: Config, root: string): string[][] | null {
-  const tpl = readFileSync(join(PROMPTS_DIR, 'planner-prompt.md'), 'utf8');
+function runPlanner(issues: Issue[], cfg: Config, root: string, promptsDir: string): string[][] | null {
+  const tpl = readFileSync(join(promptsDir, 'planner-prompt.md'), 'utf8');
   const table = issues
     .map((i) => `- ${i.id} | ${i.slug} | ${i.title} | blockedBy: [${i.blockedBy.join(', ') || '—'}]`)
     .join('\n');
@@ -273,8 +263,8 @@ function createWorktree(root: string, branch: string, baseRef: string, wtDir: st
   return { ok: true, err: '' };
 }
 
-function buildWorkerPrompt(issue: Issue, branch: string, cfg: Config, root: string): string {
-  const tpl = readFileSync(join(PROMPTS_DIR, 'worker-prompt.md'), 'utf8');
+function buildWorkerPrompt(issue: Issue, branch: string, cfg: Config, root: string, promptsDir: string): string {
+  const tpl = readFileSync(join(promptsDir, 'worker-prompt.md'), 'utf8');
   const testCmd = cfg.testCmd || `${cfg.packageManager} test (cible UNIQUEMENT les fichiers touchés)`;
   return fill(tpl, {
     branch,
@@ -294,7 +284,7 @@ function buildWorkerPrompt(issue: Issue, branch: string, cfg: Config, root: stri
   });
 }
 
-function runWorker(issue: Issue, baseRef: string, cfg: Config, root: string, runDir: string): Promise<WorkerResult> {
+function runWorker(issue: Issue, baseRef: string, cfg: Config, root: string, runDir: string, promptsDir: string): Promise<WorkerResult> {
   const branch = `${sanitizeBranchPart(basename(runDir))}/${sanitizeBranchPart(issue.slug)}`;
   const wtDir = join(runDir, sanitizeBranchPart(issue.slug));
   const logFile = join(runDir, `${issue.id}.log`);
@@ -306,7 +296,7 @@ function runWorker(issue: Issue, baseRef: string, cfg: Config, root: string, run
       res({ ...base, reason: created.err });
       return;
     }
-    const prompt = buildWorkerPrompt(issue, branch, cfg, root);
+    const prompt = buildWorkerPrompt(issue, branch, cfg, root, promptsDir);
     const args = ['-p', prompt, '--output-format', 'json', '--dangerously-skip-permissions'];
     const model = pickModel(cfg.workerModel, cfg.model);
     if (model) args.push('--model', model);
@@ -415,27 +405,11 @@ function loadConfigFile(path: string): Partial<Config> {
 }
 
 // ---------------------------------------------------------------------------
-// --init : écrit un fichier de config exemple dans le repo cible
+// Point d'entrée moteur — appelé par .hachibi/main.ts
 // ---------------------------------------------------------------------------
-function writeInitConfig(root: string): void {
-  const dest = join(root, 'hachibi.config.json');
-  if (existsSync(dest)) {
-    console.error(`Existe déjà : ${dest} (rien écrasé).`);
-    process.exit(1);
-  }
-  const example = join(PKG_ROOT, 'hachibi.config.example.json');
-  const content = existsSync(example)
-    ? readFileSync(example, 'utf8')
-    : JSON.stringify({ maxParallel: 3, model: 'claude-sonnet-4-6' }, null, 2);
-  writeFileSync(dest, content);
-  console.log(`✅ Config écrite : ${dest.replace(root + '/', '')}\n   Édite-la puis lance : npx hachibi <issuesDir> --yes`);
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-async function main() {
+export async function run(opts: RunOptions = {}): Promise<void> {
   const { values, positionals } = parseArgs({
+    args: opts.argv ?? process.argv.slice(2),
     allowPositionals: true,
     options: {
       config: { type: 'string' },
@@ -447,27 +421,15 @@ async function main() {
       'no-planner': { type: 'boolean' },
       'no-merge': { type: 'boolean' },
       'keep-worktrees': { type: 'boolean' },
-      init: { type: 'boolean' },
-      version: { type: 'boolean' },
       yes: { type: 'boolean' },
       help: { type: 'boolean' },
     },
   });
 
-  if (values.version) {
-    console.log(packageVersion());
-    return;
-  }
-
-  if (values.init) {
-    writeInitConfig(repoRoot());
-    return;
-  }
-
   if (values.help || !positionals[0]) {
-    console.log(`hachibi v${packageVersion()} — build parallèle d'issues (worktrees isolés + claude headless)
+    console.log(`hachibi — build parallèle d'issues (worktrees isolés + claude headless)
 
-Usage : npx hachibi <issuesDir> [options]
+Usage : npx tsx .hachibi/main.ts <issuesDir> [options]
 
   <issuesDir>            Dossier des issues Markdown (ex: docs/issues/ma-feature)
 
@@ -478,28 +440,33 @@ Options :
   --max-parallel <n>     Workers simultanés par vague (défaut 3)
   --model <id>           Modèle par défaut (planner + workers, défaut claude-sonnet-4-6).
                          Réglage fin par étape (plannerModel/workerModel/
-                         adversarialReviewModel) via hachibi.config.json.
+                         adversarialReviewModel) via .hachibi/config.json.
   --base <ref>           Ref de base de la branche d'intégration (défaut HEAD)
   --integration <name>   Nom de la branche d'intégration (défaut auto)
   --no-merge             Ne fusionne pas automatiquement (laisse branches + worktrees)
   --keep-worktrees       Conserve les worktrees même en cas de succès
-  --config <path>        Fichier de config JSON (défaut: <repo>/hachibi.config.json)
-  --init                 Écrit un hachibi.config.json exemple dans le repo courant
-  --version              Affiche la version
+  --config <path>        Fichier de config JSON (défaut: .hachibi/config.json)
 `);
-    process.exit(values.help ? 0 : 1);
+    if (!values.help) process.exitCode = 1;
+    return;
   }
 
   const root = repoRoot();
   const issuesDir = resolve(positionals[0]);
   if (!existsSync(issuesDir)) {
     console.error(`Dossier introuvable : ${issuesDir}`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
-  // Config : --config <path>, sinon <repo>/hachibi.config.json (par défaut).
-  const cfgPath = values.config ? resolve(values.config) : join(root, 'hachibi.config.json');
-  const fileCfg = existsSync(cfgPath) ? loadConfigFile(cfgPath) : {};
+  // Prompts + config : par défaut dans <repo>/.hachibi/ (scaffoldé par `hachibi init`),
+  // surchargeables via les options du wrapper.
+  const hachibiDir = join(root, '.hachibi');
+  const promptsDir = opts.promptsDir ?? join(hachibiDir, 'prompts');
+
+  // Config : --config <path>, sinon le configPath par défaut (.hachibi/config.json).
+  const cfgPath = values.config ? resolve(values.config) : (opts.configPath ?? join(hachibiDir, 'config.json'));
+  const fileCfg = cfgPath && existsSync(cfgPath) ? loadConfigFile(cfgPath) : {};
   const overrides: Partial<Config> = { ...fileCfg };
   if (values['max-parallel']) overrides.maxParallel = parseInt(values['max-parallel'], 10);
   if (values.model) overrides.model = values.model;
@@ -508,7 +475,8 @@ Options :
   const issues = parseIssues(issuesDir);
   if (!issues.length) {
     console.error('Aucune issue trouvée (fichiers NN-*.md attendus).');
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   console.log(`\n📋 ${issues.length} issues dans ${cfg.issuesDir}`);
@@ -516,7 +484,7 @@ Options :
 
   // Plan
   let waves: string[][] | null = null;
-  if (!values['no-planner']) waves = runPlanner(issues, cfg, root);
+  if (!values['no-planner']) waves = runPlanner(issues, cfg, root, promptsDir);
   if (waves) {
     const v = validateWaves(waves, issues);
     if (!v.ok) {
@@ -549,7 +517,8 @@ Options :
   const mk = git(`worktree add -b ${intBranch} "${intWt}" ${startRef}`, root);
   if (!mk.ok) {
     console.error(`Échec création worktree d'intégration : ${mk.err}`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   const allResults: WorkerResult[] = [];
@@ -559,7 +528,7 @@ Options :
     const baseTip = git('rev-parse HEAD', intWt).out;
     console.log(`\n=== 🌊 Vague ${w + 1}/${waves.length} : ${waveIds.join(', ')} (base ${baseTip.slice(0, 8)}) ===`);
 
-    const results = await runPool(waveIssues, cfg.maxParallel, (it) => runWorker(it, baseTip, cfg, root, runDir));
+    const results = await runPool(waveIssues, cfg.maxParallel, (it) => runWorker(it, baseTip, cfg, root, runDir, promptsDir));
     allResults.push(...results);
 
     // Merge auto dans l'ordre des issues de la vague
@@ -597,8 +566,3 @@ Options :
   console.log('   (typecheck/lint/tests rejoués + baseline avant/après) avant de fusionner');
   console.log(`   ${intBranch} dans ta branche de travail.`);
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});

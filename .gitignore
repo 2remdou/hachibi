@@ -1,6 +1,4 @@
 node_modules/
-dist/
-.hachibi/
-hachibi.config.json
+.hachibi/worktrees/
 *.log
 .DS_Store

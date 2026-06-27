@@ -1,0 +1,27 @@
+{
+  "_comment": "Config hachibi de ce projet. Tout est optionnel. Les commandes (installCmd, typecheckCmd, lintCmd, testCmd) et rulesFile sont AUTO-DÉTECTÉES depuis package.json si tu les laisses absentes — ne les ajoute que pour surcharger. --model en ligne de commande l'emporte sur `model`.",
+
+  "maxParallel": 3,
+  "maxAttempts": 3,
+  "workerTimeoutMs": 1800000,
+
+  "_models_comment": "`model` = défaut global. Les 3 knobs héritent de `model` si vides : plannerModel = planificateur ; workerModel = session worker (/tdd, /review, /simplify) ; adversarialReviewModel = sous-agent frais de la revue adversariale.",
+  "model": "claude-sonnet-4-6",
+  "plannerModel": "",
+  "workerModel": "",
+  "adversarialReviewModel": "",
+
+  "_skills_comment": "Skills Claude invoquées par le worker (cf. prérequis).",
+  "tddCmd": "/tdd",
+  "reviewCmd": "/review",
+  "simplifyCmd": "/simplify",
+
+  "coAuthor": "Co-Authored-By: Claude <noreply@anthropic.com>",
+
+  "_surcharge_commandes": "Pour forcer des commandes (sinon auto-détectées), décommente en retirant le préfixe _ : ",
+  "_installCmd": "pnpm install --frozen-lockfile",
+  "_typecheckCmd": "pnpm typecheck",
+  "_lintCmd": "pnpm lint",
+  "_testCmd": "pnpm vitest run --changed",
+  "_rulesFile": "CLAUDE.md"
+}

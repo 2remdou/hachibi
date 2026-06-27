@@ -47,77 +47,68 @@ docs/issues/paiements/
 
 ## Installer et lancer
 
-hachibi se lance **depuis ton projet** (le repo dont tu veux coder les tâches), pas depuis
-hachibi. La même commande l'installe et le lance :
+Trois étapes, **depuis ton projet** (un repo git) : installer, scaffolder, lancer.
 
 ```bash
-cd ~/projets/mon-app                       # ← ton projet
-npx hachibi docs/issues/paiements          # affiche le PLAN (rien n'est codé) — sûr
-npx hachibi docs/issues/paiements --yes    # code pour de vrai
+cd ~/projets/mon-app                                  # ← ton projet
+
+npm install --save-dev hachibi                        # 1. installe le moteur
+npx hachibi init                                      # 2. crée .hachibi/ (main.ts, prompts/, config.json)
+
+npx tsx .hachibi/main.ts docs/issues/paiements        # 3. affiche le PLAN (rien n'est codé) — sûr
+npx tsx .hachibi/main.ts docs/issues/paiements --yes  # 4. code pour de vrai
 ```
 
-Cette commande fait deux choses d'un coup :
+Ce que fait chaque étape :
 
-- **`npx hachibi`** — télécharge hachibi (la 1ʳᵉ fois) **et le lance** ;
-- **`docs/issues/paiements`** — c'est l'**argument** : le dossier de tâches à coder. Ce n'est
-  pas un réglage d'installation, juste « voici quoi faire ».
+- **`npm install --save-dev hachibi`** — ajoute le moteur aux dépendances de dev de ton projet.
+- **`npx hachibi init`** — dépose un dossier **`.hachibi/`** à la racine : `main.ts` (le point
+  d'entrée), `prompts/` (les consignes données aux agents) et `config.json`. **Tout est
+  éditable**, et se versionne avec ton projet.
+- **`npx tsx .hachibi/main.ts <issuesDir>`** — lance hachibi. `tsx` exécute le TypeScript
+  directement (aucun build). `<issuesDir>` est l'**argument** : le dossier de tâches à coder,
+  pas un réglage d'installation.
 
 Sans `--yes`, hachibi montre seulement le plan et s'arrête : **commence toujours par là.**
 
-### Faut-il « installer » hachibi ?
+> **Raccourci** — fige la commande dans un script de ton `package.json` :
+> `"scripts": { "issues": "tsx .hachibi/main.ts docs/issues/paiements" }`,
+> puis `npm run issues` (plan) ou `npm run issues -- --yes` (pour de vrai).
 
-Pas forcément — `npx` le télécharge tout seul. Trois cas :
-
-| Tu veux… | Fais |
-|----------|------|
-| L'essayer une fois | rien à installer : `npx hachibi docs/issues/paiements` |
-| L'utiliser souvent dans un projet | `npm i -D hachibi` une fois, puis `npx hachibi docs/issues/paiements` |
-| Une version pas encore publiée sur npm | `npx github:2remdou/hachibi docs/issues/paiements` |
-
-En usage régulier, tu peux figer la commande dans un script de ton `package.json` :
-
-```json
-{
-  "scripts": {
-    "issues": "hachibi docs/issues/paiements"
-  }
-}
-```
-
-puis `npm run issues` (plan) ou `npm run issues -- --yes` (pour de vrai).
-
-> Depuis GitHub : `#ref` épingle la **version de hachibi** (`...#main`, `...#v0.1.0`), pas ton
-> dossier d'issues. Le 1ᵉʳ lancement est plus lent (hachibi est compilé à l'install).
+> **Avant publication npm** — installe depuis GitHub puis `init` comme d'habitude :
+> `npm i -D github:2remdou/hachibi` (épingle une version avec `#main` ou `#v0.1.0`).
 
 ## Exemples d'utilisation des options
 
+Les options se passent à `.hachibi/main.ts` (après `npx hachibi init`) :
+
 ```bash
 # Plan seul (comportement par défaut, sans --yes) — sûr, à faire en premier
-npx hachibi docs/issues/paiements
+npx tsx .hachibi/main.ts docs/issues/paiements
 
 # Lancer pour de vrai (workers claude en parallèle + merge auto)
-npx hachibi docs/issues/paiements --yes
+npx tsx .hachibi/main.ts docs/issues/paiements --yes
 
 # Démarrage prudent : 1 worker à la fois, sans planificateur LLM (tri topologique déterministe)
-npx hachibi docs/issues/paiements --yes --max-parallel 1 --no-planner
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --max-parallel 1 --no-planner
 
 # Plus de parallélisme : 5 workers par vague
-npx hachibi docs/issues/paiements --yes --max-parallel 5
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --max-parallel 5
 
 # Modèle plus puissant pour planner + workers
-npx hachibi docs/issues/paiements --yes --model claude-opus-4-8
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --model claude-opus-4-8
 
 # Repartir d'une autre base et nommer la branche d'intégration
-npx hachibi docs/issues/paiements --yes --base develop --integration feat/paiements
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --base develop --integration feat/paiements
 
 # Ne PAS fusionner automatiquement — inspecter chaque branche de worker avant
-npx hachibi docs/issues/paiements --yes --no-merge
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --no-merge
 
 # Conserver les worktrees même en cas de succès (debug)
-npx hachibi docs/issues/paiements --yes --keep-worktrees
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --keep-worktrees
 
-# Utiliser un fichier de config à un emplacement non standard
-npx hachibi docs/issues/paiements --yes --config config/hachibi.prod.json
+# Utiliser un fichier de config à un autre emplacement que .hachibi/config.json
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --config config/hachibi.prod.json
 ```
 
 ### Toutes les options
@@ -133,20 +124,16 @@ npx hachibi docs/issues/paiements --yes --config config/hachibi.prod.json
 | `--integration <name>` | Nom de la branche d'intégration (défaut auto-horodaté) |
 | `--no-merge` | Ne fusionne pas automatiquement (laisse branches + worktrees) |
 | `--keep-worktrees` | Conserve les worktrees même en cas de succès |
-| `--config <path>` | Fichier de config JSON (défaut `<repo>/hachibi.config.json`) |
-| `--init` | Écrit un `hachibi.config.json` exemple dans le repo courant |
-| `--version` | Affiche la version |
+| `--config <path>` | Fichier de config JSON (défaut `.hachibi/config.json`) |
 
-## Configuration — `hachibi.config.json`
+> Le **bin** `hachibi` (séparé du moteur) ne sert qu'au scaffolding : `npx hachibi init`
+> (crée `.hachibi/`, `--force` pour écraser) et `npx hachibi --version`.
 
-Tout est **auto-détecté** depuis le `package.json` de ton projet (gestionnaire de paquets,
-scripts `typecheck`/`lint`/`test`, fichier de règles). Tu ne crées un `hachibi.config.json`
-**à la racine de ton projet** que pour **surcharger** ce qui ne convient pas. Génère un
-squelette prêt à éditer :
+## Configuration — `.hachibi/config.json`
 
-```bash
-npx hachibi --init      # écrit hachibi.config.json à la racine du projet courant
-```
+`npx hachibi init` a déjà créé **`.hachibi/config.json`** : tu n'as qu'à l'éditer. Tout est
+**auto-détecté** depuis le `package.json` de ton projet (gestionnaire de paquets, scripts
+`typecheck`/`lint`/`test`, fichier de règles) — ne renseigne une clé que pour **surcharger**.
 
 Toutes les clés sont optionnelles. Référence complète annotée :
 
@@ -179,9 +166,11 @@ Toutes les clés sont optionnelles. Référence complète annotée :
 }
 ```
 
-> Un `.json` réel n'accepte pas les commentaires `//` (ici en `jsonc` pour l'explication).
-> `npx hachibi --init` génère un fichier JSON **valide** (commentaires portés par des clés
-> `_comment`). `--model` en ligne de commande l'emporte sur le `model` du fichier.
+> Le `.json` réel n'accepte pas les commentaires `//` (ici en `jsonc` pour l'explication). Le
+> `.hachibi/config.json` généré par `init` est un JSON **valide** : les commandes
+> (`installCmd`/`typecheckCmd`/…) y sont **omises** (donc auto-détectées) et fournies en
+> exemples sous des clés préfixées `_` (inertes). `--model` en ligne de commande l'emporte sur
+> le `model` du fichier.
 
 ### Scénarios de config concrets
 
@@ -244,7 +233,7 @@ Un fichier par issue, nommé `NN-slug.md` (ex. `01-organisations-liste.md`). hac
    dépendances **et la contention de fichiers**. Repli déterministe (tri topologique) si le
    LLM échoue ou produit un plan invalide.
 3. **Workers** — par vague, jusqu'à `maxParallel` issues en parallèle. Chaque worker :
-   `git worktree add` + install, puis un `claude -p` qui exécute `prompts/worker-prompt.md`.
+   `git worktree add` + install, puis un `claude -p` qui exécute `.hachibi/prompts/worker-prompt.md`.
 4. **Merge auto** — chaque branche réussie est fusionnée dans la branche d'intégration. Un
    conflit → `merge --abort`, branche + worktree conservés, signalé dans le rapport.
 
@@ -256,7 +245,7 @@ sur sa branche ?), pas uniquement sur ce qu'il déclare.
 Rien n'est codé en dur pour un repo. `detectConfig` lit le `package.json` du projet cible :
 gestionnaire de paquets (`pnpm`/`npm`/`yarn`), scripts `typecheck`/`lint`/`test`, fichier de
 règles (`CLAUDE.md`/`AGENTS.md`/`.cursorrules`). Sur un projet **non-Node** (pas de
-`package.json`), l'install est sautée — surcharge tout via `hachibi.config.json` ou les flags.
+`package.json`), l'install est sautée — surcharge tout via `.hachibi/config.json` ou les flags.
 
 ## ⚠️ Limites à connaître
 
@@ -268,16 +257,21 @@ règles (`CLAUDE.md`/`AGENTS.md`/`.cursorrules`). Sur un projet **non-Node** (pa
 - **Les PASS sont auto-déclarés** par des agents. **Revérifie toi-même** (typecheck/lint/tests
   rejoués + baseline avant/après) la branche d'intégration avant de la fusionner.
 
-## Développement (contributeurs)
+## Architecture & développement (contributeurs)
 
-Source TypeScript dans `src/`, compilée vers `dist/` par `tsc` (cf.
-[ADR 0001](docs/adr/0001-typescript-compile-to-dist.md)) — un `.ts` ne peut pas être exécuté
-sous `node_modules`, d'où le build.
+**Aucun build.** Le package livre directement du TypeScript ; `tsx` le transpile à la volée,
+y compris depuis `node_modules` (cf. [ADR 0003](docs/adr/0003-scaffold-and-tsx.md)). Deux
+morceaux :
+
+- **`bin/hachibi.js`** (JavaScript pur) — le scaffolder : `hachibi init` copie `template/.hachibi/`
+  dans le projet. En JS car le bin npm est lancé par `node` depuis `node_modules`, qui refuse
+  le TypeScript ([ADR 0001](docs/adr/0001-typescript-compile-to-dist.md), désormais *superseded*).
+- **`src/orchestrate.ts`** (TypeScript) — le moteur, exporté via `exports` et importé par
+  `.hachibi/main.ts` (lancé par `tsx`).
 
 ```bash
 npm install
-npm run build      # tsc -p . → dist/
-npm run dev        # tsc --watch
+npm run typecheck   # tsc --noEmit (aucun artefact émis)
 ```
 
 Le glossaire du domaine est dans [CONTEXT.md](CONTEXT.md), les décisions dans [docs/adr/](docs/adr/).

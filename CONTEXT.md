@@ -67,3 +67,24 @@ fichier de règles du **projet cible** — il ne présuppose aucun framework. À
 **runtime** qu'il présuppose, lui, fixe : le CLI `claude` + les skills `/tdd`, `/review`,
 `/simplify` (cf. ADR 0002).
 _Avoid_: générique (trop vague — préciser stack-agnostique vs runtime-spécifique)
+
+**Scaffold** (`hachibi init`):
+L'action de déposer le dossier `.hachibi/` dans le projet cible (depuis le `template/` du
+package). C'est le seul rôle du **bin**.
+_Avoid_: génération, install (l'install, c'est `npm i -D hachibi` ; le scaffold, c'est `init`)
+
+**`.hachibi/`**:
+Le dossier déposé dans le projet par `init` : `main.ts` (wrapper), `prompts/`, `config.json`
+— **éditables et versionnés**. Le sous-dossier `worktrees/` (artefacts d'exécution) est, lui,
+gitignoré.
+_Avoid_: dossier de config, .config
+
+**Wrapper** (`.hachibi/main.ts`):
+Le point d'entrée fin, propre au projet, lancé par `tsx`. Il importe le **moteur** depuis le
+package et le démarre. Éditable par l'utilisateur.
+_Avoid_: main, entrypoint (en anglais), script
+
+**Moteur** (engine):
+La logique d'orchestration, livrée par le package en TypeScript (`src/orchestrate.ts`,
+exporte `run()`), transpilée par tsx. À distinguer du **bin** (JS, scaffolding seul).
+_Avoid_: core, lib, orchestrateur (réserver « orchestrateur » au produit entier)

@@ -1,5 +1,11 @@
 # 0001 — Source TypeScript compilée vers dist/ (pas d'exécution directe du .ts)
 
+> **Statut : superseded par [ADR 0003](0003-scaffold-and-tsx.md).** Le moteur n'est plus
+> exécuté via le `bin` npm mais importé par `.hachibi/main.ts` lancé par **tsx**, qui
+> transpile le TS y compris sous `node_modules` → plus de build `dist/`. Ce qui reste vrai et
+> motive encore ADR 0003 : le **bin** (`bin/hachibi.js`), lui, est lancé par `node` depuis
+> `node_modules` et doit donc rester du **JavaScript** (d'où un bin JS minimal pour `init`).
+
 L'orchestrateur d'origine (dans triton) tournait en `.ts` exécuté directement par Node,
 sans build, grâce au type-stripping natif — un argument de vente assumé (« aucun build »).
 Pour hachibi nous compilons au contraire la source TypeScript vers `dist/*.js` (via `tsc`)
