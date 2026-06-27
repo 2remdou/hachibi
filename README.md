@@ -47,36 +47,46 @@ docs/issues/paiements/
 
 ## Installer et lancer
 
-Trois étapes, **depuis ton projet** (un repo git) : installer, scaffolder, lancer.
+Toujours **trois temps, depuis ton projet** (un repo git) : **installer → scaffolder → lancer**.
+Seule la 1ʳᵉ commande change selon d'où tu installes hachibi.
+
+### 1. Installer hachibi (choisis UNE méthode)
+
+| Méthode | Commande (dans ton projet) | Quand l'utiliser |
+|---------|----------------------------|------------------|
+| **GitHub** | `npm i -D github:2remdou/hachibi` | Le plus simple, **sans rien publier** : il suffit que le repo soit poussé. |
+| **GitHub épinglé** | `npm i -D github:2remdou/hachibi#v0.1.0` | Figer une version précise (`#tag`, `#branche` ou `#commit`). |
+| **npm public** | `npm i -D hachibi` | Si hachibi est **publié sur npm** (`npm publish`). Nom court, accessible à tous. |
+| **Tarball local** | `npm pack` (dans hachibi) → `npm i -D ../chemin/hachibi-0.1.0.tgz` | Usage perso / hors-ligne, sans aucun registre. |
+| **Registre privé** | `npm i -D hachibi` (après `npm publish` sur ton registre/GitHub Packages) | Équipe, sans exposition publique. |
+
+> Un repo **privé** (GitHub ou registre privé) demande d'être authentifié (`git`/npm) au moment
+> de l'install. Toutes ces méthodes mènent ensuite **au même flux** ci-dessous.
+
+### 2. Scaffolder
 
 ```bash
-cd ~/projets/mon-app                                  # ← ton projet
-
-npm install --save-dev hachibi                        # 1. installe le moteur
-npx hachibi init                                      # 2. crée .hachibi/ (main.ts, prompts/, config.json)
-
-npx tsx .hachibi/main.ts docs/issues/paiements        # 3. affiche le PLAN (rien n'est codé) — sûr
-npx tsx .hachibi/main.ts docs/issues/paiements --yes  # 4. code pour de vrai
+npx hachibi init        # dépose .hachibi/ à la racine : main.ts + prompts/ + config.json
 ```
 
-Ce que fait chaque étape :
+`.hachibi/` est **éditable et se versionne avec ton projet** : `main.ts` (point d'entrée),
+`prompts/` (consignes données aux agents), `config.json` (réglages). `--force` écrase un
+`.hachibi/` existant.
 
-- **`npm install --save-dev hachibi`** — ajoute le moteur aux dépendances de dev de ton projet.
-- **`npx hachibi init`** — dépose un dossier **`.hachibi/`** à la racine : `main.ts` (le point
-  d'entrée), `prompts/` (les consignes données aux agents) et `config.json`. **Tout est
-  éditable**, et se versionne avec ton projet.
-- **`npx tsx .hachibi/main.ts <issuesDir>`** — lance hachibi. `tsx` exécute le TypeScript
-  directement (aucun build). `<issuesDir>` est l'**argument** : le dossier de tâches à coder,
-  pas un réglage d'installation.
+### 3. Lancer (via tsx)
 
-Sans `--yes`, hachibi montre seulement le plan et s'arrête : **commence toujours par là.**
+```bash
+npx tsx .hachibi/main.ts docs/issues/paiements        # affiche le PLAN (rien n'est codé) — sûr
+npx tsx .hachibi/main.ts docs/issues/paiements --yes  # code pour de vrai
+```
+
+`tsx` exécute le TypeScript directement (**aucun build**). `docs/issues/paiements` est
+l'**argument** : le dossier de tâches à coder, pas un réglage d'installation. Sans `--yes`,
+hachibi montre seulement le plan : **commence toujours par là.**
 
 > **Raccourci** — fige la commande dans un script de ton `package.json` :
 > `"scripts": { "issues": "tsx .hachibi/main.ts docs/issues/paiements" }`,
 > puis `npm run issues` (plan) ou `npm run issues -- --yes` (pour de vrai).
-
-> **Avant publication npm** — installe depuis GitHub puis `init` comme d'habitude :
-> `npm i -D github:2remdou/hachibi` (épingle une version avec `#main` ou `#v0.1.0`).
 
 ## Exemples d'utilisation des options
 
