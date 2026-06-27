@@ -41,6 +41,7 @@ type Issue = {
   file: string; // chemin absolu
   title: string;
   blockedBy: number[]; // numéros des bloqueurs
+  done: boolean; // marquée faite via `## Status` (done/fait/terminé/…)
 };
 
 type Config = {
@@ -121,7 +122,7 @@ function parseIssues(dir: string): Issue[] {
     const id = (slug.match(/^(\d+)/) || ['', slug])[1];
     const num = parseInt(id, 10);
     const titleLine = (raw.match(/^#\s+(.+)$/m) || ['', slug])[1].trim();
-    return { id, num, slug, file: join(dir, f), title: titleLine, blockedBy: [] as number[], raw };
+    return { id, num, slug, file: join(dir, f), title: titleLine, blockedBy: [] as number[], done: isDone(raw), raw };
   });
 
   const allNums = new Set(withRaw.map((i) => i.num));
@@ -129,6 +130,13 @@ function parseIssues(dir: string): Issue[] {
     ...issue,
     blockedBy: parseBlockedBy(raw, issue.num, allNums),
   }));
+}
+
+// Une issue est « faite » si sa section `## Status` indique done/fait/terminé/… ou [x].
+function isDone(raw: string): boolean {
+  const m = raw.match(/##\s*Status\s*([\s\S]*?)(?:\n##\s|\n#\s|$)/i);
+  if (!m) return false;
+  return /\b(done|fait|termin\w*|complete\w*|closed|merged|int[ée]gr\w*)\b|✅|\[x\]/i.test(m[1]);
 }
 
 function parseBlockedBy(raw: string, selfNum: number, allNums: Set<number>): number[] {
@@ -417,6 +425,8 @@ export async function run(opts: RunOptions = {}): Promise<void> {
       model: { type: 'string' },
       base: { type: 'string' },
       integration: { type: 'string' },
+      only: { type: 'string' },
+      skip: { type: 'string' },
       'plan-only': { type: 'boolean' },
       'no-planner': { type: 'boolean' },
       'no-merge': { type: 'boolean' },
@@ -438,6 +448,8 @@ Options :
   --plan-only            Affiche le plan de vagues puis quitte
   --no-planner           Saute le planificateur LLM, utilise le tri topologique
   --max-parallel <n>     Workers simultanés par vague (défaut 3)
+  --only <ids>           Ne traite QUE ces issues (ex: 03,04)
+  --skip <ids>           Ignore ces issues (ex: 01,02)
   --model <id>           Modèle par défaut (planner + workers, défaut claude-sonnet-4-6).
                          Réglage fin par étape (plannerModel/workerModel/
                          adversarialReviewModel) via .hachibi/config.json.
@@ -446,6 +458,10 @@ Options :
   --no-merge             Ne fusionne pas automatiquement (laisse branches + worktrees)
   --keep-worktrees       Conserve les worktrees même en cas de succès
   --config <path>        Fichier de config JSON (défaut: .hachibi/config.json)
+
+Issues déjà faites : ajoute une section "## Status" valant done/fait/terminé dans
+le fichier de l'issue — elle sera ignorée (et ses dépendants la considèrent comme
+satisfaite). Pour de l'ad hoc, utilise plutôt --only / --skip.
 `);
     if (!values.help) process.exitCode = 1;
     return;
@@ -472,15 +488,39 @@ Options :
   if (values.model) overrides.model = values.model;
   const cfg = detectConfig(root, issuesDir.replace(root + '/', ''), overrides);
 
-  const issues = parseIssues(issuesDir);
-  if (!issues.length) {
+  const allIssues = parseIssues(issuesDir);
+  if (!allIssues.length) {
     console.error('Aucune issue trouvée (fichiers NN-*.md attendus).');
     process.exitCode = 1;
     return;
   }
 
-  console.log(`\n📋 ${issues.length} issues dans ${cfg.issuesDir}`);
+  // Sélection : on écarte les issues déjà faites (## Status), puis on applique --only / --skip.
+  // Les bloqueurs écartés sont traités comme satisfaits (cf. topoWaves / validateWaves).
+  const parseIds = (s?: string) =>
+    new Set((s ?? '').split(',').map((x) => parseInt(x.trim(), 10)).filter((n) => !Number.isNaN(n)));
+  const onlySet = parseIds(values.only);
+  const skipSet = parseIds(values.skip);
+  const allNums = new Set(allIssues.map((i) => i.num));
+  for (const n of [...onlySet, ...skipSet]) {
+    if (!allNums.has(n)) console.warn(`⚠️  --only/--skip : id ${n} ne correspond à aucune issue.`);
+  }
+
+  const doneIssues = allIssues.filter((i) => i.done);
+  let issues = allIssues.filter((i) => !i.done);
+  if (onlySet.size) issues = issues.filter((i) => onlySet.has(i.num));
+  if (skipSet.size) issues = issues.filter((i) => !skipSet.has(i.num));
+
+  console.log(`\n📋 ${allIssues.length} issues dans ${cfg.issuesDir} → ${issues.length} à traiter`);
+  if (doneIssues.length) console.log(`   ⏭️  ${doneIssues.length} déjà faite(s) (## Status) : ${doneIssues.map((i) => i.id).join(', ')}`);
+  if (onlySet.size) console.log(`   🎯 --only : ${[...onlySet].join(', ')}`);
+  if (skipSet.size) console.log(`   🚫 --skip : ${[...skipSet].join(', ')}`);
   console.log(`   pm=${cfg.packageManager} · typecheck="${cfg.typecheckCmd}" · lint="${cfg.lintCmd}" · règles=${cfg.rulesFile || '—'}`);
+
+  if (!issues.length) {
+    console.log('\n✅ Rien à lancer (toutes les issues sont faites ou filtrées).');
+    return;
+  }
 
   // Plan
   let waves: string[][] | null = null;

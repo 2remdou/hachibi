@@ -114,6 +114,12 @@ npx tsx .hachibi/main.ts docs/issues/paiements --yes --base develop --integratio
 # Ne PAS fusionner automatiquement — inspecter chaque branche de worker avant
 npx tsx .hachibi/main.ts docs/issues/paiements --yes --no-merge
 
+# Ne traiter QUE certaines issues (ad hoc, sans toucher aux fichiers)
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --only 03,04
+
+# Ignorer certaines issues
+npx tsx .hachibi/main.ts docs/issues/paiements --yes --skip 01,02
+
 # Conserver les worktrees même en cas de succès (debug)
 npx tsx .hachibi/main.ts docs/issues/paiements --yes --keep-worktrees
 
@@ -129,6 +135,8 @@ npx tsx .hachibi/main.ts docs/issues/paiements --yes --config config/hachibi.pro
 | `--plan-only` | Affiche le plan puis quitte |
 | `--no-planner` | Saute le planificateur LLM, utilise le tri topologique déterministe |
 | `--max-parallel <n>` | Workers simultanés par vague (défaut 3) |
+| `--only <ids>` | Ne traite QUE ces issues (ex. `03,04`) |
+| `--skip <ids>` | Ignore ces issues (ex. `01,02`) |
 | `--model <id>` | Modèle par défaut planner + workers (défaut `claude-sonnet-4-6`) |
 | `--base <ref>` | Base de la branche d'intégration (défaut `HEAD`) |
 | `--integration <name>` | Nom de la branche d'intégration (défaut auto-horodaté) |
@@ -224,10 +232,15 @@ Un fichier par issue, nommé `NN-slug.md` (ex. `01-organisations-liste.md`). hac
 
 - Le **titre** : la première ligne `# ...`.
 - Les **dépendances** : la section `## Blocked by` (les numéros y sont extraits ;
-  `none`/`aucun`/absence de section = aucune dépendance). Exemple :
+  `none`/`aucun`/absence de section = aucune dépendance).
+- L'**état** (optionnel) : la section `## Status`. Si elle vaut `done`/`fait`/`terminé`
+  (ou `✅`, `[x]`), l'issue est **ignorée** — déjà faite. Exemple :
 
 ```markdown
 # Organisations — liste & détail
+
+## Status
+done
 
 ## Blocked by
 - 02 (schéma partagé)
@@ -235,6 +248,18 @@ Un fichier par issue, nommé `NN-slug.md` (ex. `01-organisations-liste.md`). hac
 ## Critères d'acceptation
 - ...
 ```
+
+### Reprendre un dossier où des issues sont déjà faites
+
+Par défaut hachibi traite **tous** les `NN-*.md` du dossier. Pour qu'il en saute :
+
+- **`## Status: done`** dans le fichier (persistant, versionné) — l'issue est ignorée, et ses
+  **dépendants la considèrent comme satisfaite** (le bloqueur écarté ne bloque plus).
+- **`--only 03,04`** / **`--skip 01,02`** — sélection ad hoc à l'exécution, sans toucher aux fichiers.
+- Sinon, le **workaround zéro-config** : sors/déplace les fichiers déjà faits hors du dossier visé.
+
+> hachibi ne marque **pas** les issues `done` tout seul après intégration : c'est à toi de le
+> faire (ou d'utiliser `--skip`). Ça garde la décision « c'est fini » entre tes mains.
 
 ## Comment ça marche
 
