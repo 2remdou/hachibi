@@ -23,67 +23,105 @@ hachibi **présuppose un runtime Claude Code** (il ne dégrade pas si absent —
 - **Node ≥ 18** et le projet cible est un **dépôt git** (hachibi travaille dans des
   worktrees ; l'arbre principal n'est **jamais** touché, tes modifs non commitées restent).
 
-## Installation
+## Démarrage rapide dans ton projet
 
-hachibi se lance dans la racine du **projet git que tu veux outiller** (pas dans hachibi lui-même).
-
-### Depuis npm (recommandé)
-
-Sans rien installer, à la demande :
+hachibi se lance **depuis la racine du projet git que tu veux outiller** (pas depuis hachibi
+lui-même). Flux complet, de zéro :
 
 ```bash
-npx hachibi docs/issues/ma-feature
-```
+# 1. Place-toi dans TON projet (celui dont tu veux implémenter les issues)
+cd ~/projets/mon-app
 
-Ou en dépendance de dev du projet (évite le re-téléchargement à chaque appel) :
+# 2. Il te faut un dossier d'issues au format NN-*.md (typiquement la sortie de /to-issues).
+#    Sinon, crée-en un à la main :
+mkdir -p docs/issues/paiements
+cat > docs/issues/paiements/01-schema-paiement.md <<'MD'
+# Schéma de paiement
 
-```bash
+## Blocked by
+none
+
+## Critères d'acceptation
+- Une transaction a un montant, une devise et un statut
+MD
+
+# 3. (optionnel) Installe hachibi en dépendance de dev du projet
 npm i -D hachibi
-npx hachibi docs/issues/ma-feature
-# ou via un script package.json : "issues": "hachibi docs/issues/ma-feature"
+
+# 4. Visualise le plan de vagues — AUCUN worker lancé, totalement sûr
+npx hachibi docs/issues/paiements
+
+# 5. Quand le plan te convient, lance pour de vrai
+npx hachibi docs/issues/paiements --yes
 ```
 
-### Depuis GitHub (avant publication npm, ou pour une version non publiée)
+À la fin, hachibi affiche un rapport et le nom de la **branche d'intégration** (ex.
+`orchestrate/paiements-20260627143000`) où les issues réussies ont été fusionnées — ta
+branche de travail n'a pas bougé. Revérifie cette branche (typecheck/lint/tests), puis
+fusionne-la toi-même.
+
+## Installation — 3 façons
+
+| Méthode | Commande | Quand l'utiliser |
+|---------|----------|------------------|
+| **npx à la demande** | `npx hachibi docs/issues/x` | Essai ponctuel, rien à installer |
+| **dépendance de dev** | `npm i -D hachibi` puis `npx hachibi docs/issues/x` | Usage régulier dans un projet |
+| **GitHub** | `npx github:2remdou/hachibi docs/issues/x` | Avant publication npm / version non publiée |
+
+En **dépendance de dev**, tu peux exposer un script dans le `package.json` de ton projet :
+
+```json
+{
+  "scripts": {
+    "issues": "hachibi docs/issues/paiements"
+  }
+}
+```
+
+puis `npm run issues` (plan) ou `npm run issues -- --yes` (exécution).
+
+Depuis **GitHub**, tu peux épingler une branche, un tag ou un commit :
 
 ```bash
-# Dernier commit de la branche par défaut
-npx github:2remdou/hachibi docs/issues/ma-feature
-
-# Épingler une branche, un tag ou un commit
-npx github:2remdou/hachibi#main docs/issues/ma-feature
-npx github:2remdou/hachibi#v0.1.0 docs/issues/ma-feature
+npx github:2remdou/hachibi#main docs/issues/x      # branche
+npx github:2remdou/hachibi#v0.1.0 docs/issues/x    # tag
 ```
 
-> `npx github:…` clone et **build** le package (script `prepare`, via `tsc`) — la première
-> exécution est plus lente que via npm. Nécessite un accès au dépôt.
+> `npx github:…` clone et **build** le package (script `prepare`, via `tsc`) : la première
+> exécution est plus lente que via npm, et nécessite un accès au dépôt.
 
-## Exemples d'utilisation
+## Exemples d'utilisation des options
 
 ```bash
-# 1. Voir le plan de vagues — AUCUN worker lancé, totalement sûr. À faire en premier.
-npx hachibi docs/issues/ma-feature
+# Plan seul (comportement par défaut, sans --yes) — sûr, à faire en premier
+npx hachibi docs/issues/paiements
 
-# 2. Lancer pour de vrai (lance les workers claude en parallèle)
-npx hachibi docs/issues/ma-feature --yes
+# Lancer pour de vrai (workers claude en parallèle + merge auto)
+npx hachibi docs/issues/paiements --yes
 
-# 3. Démarrage prudent : 1 worker à la fois, plan déterministe (sans planificateur LLM)
-npx hachibi docs/issues/ma-feature --yes --max-parallel 1 --no-planner
+# Démarrage prudent : 1 worker à la fois, sans planificateur LLM (tri topologique déterministe)
+npx hachibi docs/issues/paiements --yes --max-parallel 1 --no-planner
 
-# 4. Forcer un modèle plus puissant pour planner + workers
-npx hachibi docs/issues/ma-feature --yes --model claude-opus-4-8
+# Plus de parallélisme : 5 workers par vague
+npx hachibi docs/issues/paiements --yes --max-parallel 5
 
-# 5. Partir d'une autre base et nommer la branche d'intégration
-npx hachibi docs/issues/ma-feature --yes --base develop --integration feat/ma-feature
+# Modèle plus puissant pour planner + workers
+npx hachibi docs/issues/paiements --yes --model claude-opus-4-8
 
-# 6. Ne pas fusionner automatiquement (inspecter chaque branche avant)
-npx hachibi docs/issues/ma-feature --yes --no-merge
+# Repartir d'une autre base et nommer la branche d'intégration
+npx hachibi docs/issues/paiements --yes --base develop --integration feat/paiements
 
-# 7. Générer un fichier de config à éditer (modèles par étape, commandes…), puis lancer
-npx hachibi --init
-npx hachibi docs/issues/ma-feature --yes
+# Ne PAS fusionner automatiquement — inspecter chaque branche de worker avant
+npx hachibi docs/issues/paiements --yes --no-merge
+
+# Conserver les worktrees même en cas de succès (debug)
+npx hachibi docs/issues/paiements --yes --keep-worktrees
+
+# Utiliser un fichier de config à un emplacement non standard
+npx hachibi docs/issues/paiements --yes --config config/hachibi.prod.json
 ```
 
-### Options
+### Toutes les options
 
 | Flag | Effet |
 |------|-------|
@@ -100,18 +138,87 @@ npx hachibi docs/issues/ma-feature --yes
 | `--init` | Écrit un `hachibi.config.json` exemple dans le repo courant |
 | `--version` | Affiche la version |
 
-### Modèles par étape
+## Configuration — `hachibi.config.json`
 
-`--model` fixe le défaut global. Le **réglage fin par étape** se fait dans
-`hachibi.config.json` (chaque champ hérite de `model` si vide) :
+Tout est **auto-détecté** depuis le `package.json` de ton projet (gestionnaire de paquets,
+scripts `typecheck`/`lint`/`test`, fichier de règles). Tu ne crées un `hachibi.config.json`
+**à la racine de ton projet** que pour **surcharger** ce qui ne convient pas. Génère un
+squelette prêt à éditer :
 
-| Champ config | Processus ciblé |
-|--------------|-----------------|
-| `plannerModel` | Le planificateur (lecture seule) |
-| `workerModel` | La session worker (`/tdd`, `/review`, `/simplify` y tournent) |
-| `adversarialReviewModel` | Le sous-agent frais de la revue adversariale (étape 4) |
+```bash
+npx hachibi --init      # écrit hachibi.config.json à la racine du projet courant
+```
 
-Génère un fichier de config à éditer : `npx hachibi --init`.
+Toutes les clés sont optionnelles. Référence complète annotée :
+
+```jsonc
+{
+  // Parallélisme et robustesse
+  "maxParallel": 3,                 // workers simultanés par vague
+  "maxAttempts": 3,                 // tentatives max de la boucle gate ↔ revue adversariale
+  "workerTimeoutMs": 1800000,       // tue un worker bloqué après 30 min
+
+  // Modèles — `model` est le défaut ; chaque knob hérite de `model` s'il est vide
+  "model": "claude-sonnet-4-6",
+  "plannerModel": "",               // planificateur (lecture seule)
+  "workerModel": "",                // session worker (/tdd, /review, /simplify y tournent)
+  "adversarialReviewModel": "",     // sous-agent frais de la revue adversariale (étape 4)
+
+  // Commandes du projet (sinon auto-détectées depuis package.json)
+  "installCmd": "pnpm install --prefer-offline",
+  "typecheckCmd": "pnpm typecheck",
+  "lintCmd": "pnpm lint",
+  "testCmd": "",                    // vide = le worker cible lui-même les tests touchés
+  "rulesFile": "CLAUDE.md",         // règles projet lues par chaque worker
+
+  // Skills invoquées par le worker (cf. prérequis)
+  "tddCmd": "/tdd",
+  "reviewCmd": "/review",
+  "simplifyCmd": "/simplify",
+
+  "coAuthor": "Co-Authored-By: Claude <noreply@anthropic.com>"
+}
+```
+
+> Un `.json` réel n'accepte pas les commentaires `//` (ici en `jsonc` pour l'explication).
+> `npx hachibi --init` génère un fichier JSON **valide** (commentaires portés par des clés
+> `_comment`). `--model` en ligne de commande l'emporte sur le `model` du fichier.
+
+### Scénarios de config concrets
+
+**Monorepo pnpm avec scripts custom** — surcharger les commandes auto-détectées :
+
+```json
+{
+  "installCmd": "pnpm install --frozen-lockfile",
+  "typecheckCmd": "pnpm -w typecheck",
+  "lintCmd": "pnpm -w lint",
+  "testCmd": "pnpm vitest run --changed"
+}
+```
+
+**Modèles distincts par étape** — opus pour implémenter et réviser, sonnet (hérité) pour
+planifier, afin d'équilibrer coût et qualité :
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "workerModel": "claude-opus-4-8",
+  "adversarialReviewModel": "claude-opus-4-8"
+}
+```
+
+**Projet non-Node (Go, Python…)** — pas de `package.json`, on déclare tout explicitement :
+
+```json
+{
+  "installCmd": "",
+  "typecheckCmd": "go vet ./...",
+  "lintCmd": "golangci-lint run",
+  "testCmd": "go test ./...",
+  "rulesFile": "AGENTS.md"
+}
+```
 
 ## Format des issues (contrat d'entrée)
 
