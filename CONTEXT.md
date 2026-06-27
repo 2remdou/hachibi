@@ -85,7 +85,9 @@ _Avoid_: générique (trop vague — préciser stack-agnostique vs runtime-spéc
 
 **Scaffold** (`hachibi init`):
 L'action de déposer le dossier `.hachibi/` dans le projet cible (depuis le `template/` du
-package). C'est le seul rôle du **bin**.
+package). Le **bin** fait aussi `update` (refresh non destructif : crée les nouveaux fichiers,
+dépose les modifiés en `.new`, préserve `config.json`) et `run` (lance le wrapper via le tsx
+embarqué).
 _Avoid_: génération, install (l'install, c'est `npm i -D hachibi` ; le scaffold, c'est `init`)
 
 **`.hachibi/`**:

@@ -71,60 +71,106 @@ npx hachibi init        # dépose .hachibi/ à la racine : main.ts + prompts/ + 
 
 `.hachibi/` est **éditable et se versionne avec ton projet** : `main.ts` (point d'entrée),
 `prompts/` (consignes données aux agents), `config.json` (réglages). `--force` écrase un
-`.hachibi/` existant.
+`.hachibi/` existant ; pour le rafraîchir **sans rien perdre**, voir
+[Mettre à jour hachibi](#mettre-à-jour-hachibi).
 
-### 3. Lancer (via tsx)
+### 3. Lancer
 
 ```bash
-npx tsx .hachibi/main.ts docs/issues/paiements        # affiche le PLAN (rien n'est codé) — sûr
-npx tsx .hachibi/main.ts docs/issues/paiements --yes  # code pour de vrai
+npx hachibi run docs/issues/paiements        # affiche le PLAN (rien n'est codé) — sûr
+npx hachibi run docs/issues/paiements --yes  # code pour de vrai
 ```
 
-`tsx` exécute le TypeScript directement (**aucun build**). `docs/issues/paiements` est
-l'**argument** : le dossier de tâches à coder, pas un réglage d'installation. Sans `--yes`,
-hachibi montre seulement le plan : **commence toujours par là.**
+`docs/issues/paiements` est l'**argument** : le dossier de tâches à coder, pas un réglage
+d'installation. Sans `--yes`, hachibi montre seulement le plan : **commence toujours par là.**
+
+`hachibi run` exécute `.hachibi/main.ts` via le **tsx embarqué dans hachibi** — aucun build,
+et **pas besoin de `tsx` dans ton projet** (utile en `npm link`/`file:`). Équivalent si tu as
+déjà `tsx` : `npx tsx .hachibi/main.ts docs/issues/paiements`.
 
 > **Raccourci** — fige la commande dans un script de ton `package.json` :
-> `"scripts": { "issues": "tsx .hachibi/main.ts docs/issues/paiements" }`,
+> `"scripts": { "issues": "hachibi run docs/issues/paiements" }`,
 > puis `npm run issues` (plan) ou `npm run issues -- --yes` (pour de vrai).
+
+## Mettre à jour hachibi
+
+Quand une nouvelle version de hachibi sort (ou que tu améliores la tienne), il y a **deux
+couches** à connaître :
+
+1. **Le moteur** (le package `hachibi` dans `node_modules`). Ton `.hachibi/main.ts` l'**importe**,
+   donc toute amélioration/feature du moteur arrive **dès que le package est à jour** — rien à
+   re-scaffolder.
+2. **Le scaffold** (`.hachibi/prompts/`, `.hachibi/config.json`) : des **copies** déposées par
+   `init`. Elles ne changent **pas** toutes seules quand le package est mis à jour.
+
+### 1) Mettre à jour le moteur (le package)
+
+Selon ta méthode d'installation :
+
+| Installé via | Récupérer la dernière version |
+|--------------|-------------------------------|
+| **npm** | `npm i -D hachibi@latest` (ou `npm update hachibi`) |
+| **GitHub** | `npm i -D github:2remdou/hachibi` (ré-résout le dernier commit ; un `#tag` épinglé ne bouge pas) |
+| **lien local / `file:`** (dev) | rien à faire : un **symlink**, tes modifs du repo hachibi sont **live** au prochain run |
+
+> En **dev** sur hachibi : `npm i -D /chemin/vers/hachibi` (ou `npm link hachibi`) crée un
+> symlink. Lance ensuite avec **`npx hachibi run …`** : le `tsx` embarqué de hachibi est utilisé,
+> donc **pas besoin d'installer `tsx`** dans ton projet (ce que `npx tsx` exigerait).
+
+### 2) Mettre à jour le scaffold `.hachibi/`
+
+Si la mise à jour change les **prompts** ou le **template**, rafraîchis-le **sans rien
+écraser** :
+
+```bash
+npx hachibi update
+```
+
+- crée les **nouveaux** fichiers manquants ;
+- pour un fichier que tu as modifié et qui a aussi changé côté hachibi, écrit une version
+  **`<fichier>.new`** à côté (ton fichier **n'est pas touché** — compare puis fusionne) ;
+- **préserve toujours ton `config.json`** (proposé en `config.json.new` s'il a évolué) ;
+- laisse les fichiers identiques tels quels.
+
+Pour repartir d'un scaffold propre (et **tout écraser**) : `npx hachibi init --force`.
 
 ## Exemples d'utilisation des options
 
-Les options se passent à `.hachibi/main.ts` (après `npx hachibi init`) :
+Les options se passent après `npx hachibi run <issuesDir>` (ou `npx tsx .hachibi/main.ts <issuesDir>`) :
 
 ```bash
 # Plan seul (comportement par défaut, sans --yes) — sûr, à faire en premier
-npx tsx .hachibi/main.ts docs/issues/paiements
+npx hachibi run docs/issues/paiements
 
 # Lancer pour de vrai (workers claude en parallèle + merge auto)
-npx tsx .hachibi/main.ts docs/issues/paiements --yes
+npx hachibi run docs/issues/paiements --yes
 
 # Démarrage prudent : 1 worker à la fois, sans planificateur LLM (tri topologique déterministe)
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --max-parallel 1 --no-planner
+npx hachibi run docs/issues/paiements --yes --max-parallel 1 --no-planner
 
 # Plus de parallélisme : 5 workers par vague
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --max-parallel 5
+npx hachibi run docs/issues/paiements --yes --max-parallel 5
 
 # Modèle plus puissant pour planner + workers
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --model claude-opus-4-8
+npx hachibi run docs/issues/paiements --yes --model claude-opus-4-8
 
 # Repartir d'une autre base et nommer la branche d'intégration
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --base develop --integration feat/paiements
+npx hachibi run docs/issues/paiements --yes --base develop --integration feat/paiements
 
 # Ne PAS fusionner automatiquement — inspecter chaque branche de worker avant
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --no-merge
+npx hachibi run docs/issues/paiements --yes --no-merge
 
 # Ne traiter QUE certaines issues (ad hoc, sans toucher aux fichiers)
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --only 03,04
+npx hachibi run docs/issues/paiements --yes --only 03,04
 
 # Ignorer certaines issues
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --skip 01,02
+npx hachibi run docs/issues/paiements --yes --skip 01,02
 
 # Conserver les worktrees même en cas de succès (debug)
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --keep-worktrees
+npx hachibi run docs/issues/paiements --yes --keep-worktrees
 
 # Utiliser un fichier de config à un autre emplacement que .hachibi/config.json
-npx tsx .hachibi/main.ts docs/issues/paiements --yes --config config/hachibi.prod.json
+npx hachibi run docs/issues/paiements --yes --config config/hachibi.prod.json
 ```
 
 ### Toutes les options
@@ -145,8 +191,9 @@ npx tsx .hachibi/main.ts docs/issues/paiements --yes --config config/hachibi.pro
 | `--keep-worktrees` | Conserve les worktrees même en cas de succès |
 | `--config <path>` | Fichier de config JSON (défaut `.hachibi/config.json`) |
 
-> Le **bin** `hachibi` (séparé du moteur) ne sert qu'au scaffolding : `npx hachibi init`
-> (crée `.hachibi/`, `--force` pour écraser) et `npx hachibi --version`.
+> Le **bin** `hachibi` (séparé du moteur) gère : `init` (crée `.hachibi/`, `--force` pour
+> écraser), `update` (rafraîchit sans écraser), `run <issuesDir> [opts]` (lance via le tsx
+> embarqué) et `--version`.
 
 ## Configuration — `.hachibi/config.json`
 
@@ -313,9 +360,10 @@ règles (`CLAUDE.md`/`AGENTS.md`/`.cursorrules`). Sur un projet **non-Node** (pa
 y compris depuis `node_modules` (cf. [ADR 0003](docs/adr/0003-scaffold-and-tsx.md)). Deux
 morceaux :
 
-- **`bin/hachibi.js`** (JavaScript pur) — le scaffolder : `hachibi init` copie `template/.hachibi/`
-  dans le projet. En JS car le bin npm est lancé par `node` depuis `node_modules`, qui refuse
-  le TypeScript ([ADR 0001](docs/adr/0001-typescript-compile-to-dist.md), désormais *superseded*).
+- **`bin/hachibi.js`** (JavaScript pur) — scaffolder + lanceur : `init` / `update` / `run`. En
+  JS car le bin npm est lancé par `node` depuis `node_modules`, qui refuse le TypeScript
+  ([ADR 0001](docs/adr/0001-typescript-compile-to-dist.md), désormais *superseded*). `run`
+  lance le wrapper via le `tsx` résolu depuis les dépendances de hachibi.
 - **`src/orchestrate.ts`** (TypeScript) — le moteur, exporté via `exports` et importé par
   `.hachibi/main.ts` (lancé par `tsx`).
 
@@ -323,6 +371,10 @@ morceaux :
 npm install
 npm run typecheck   # tsc --noEmit (aucun artefact émis)
 ```
+
+Pour itérer sur hachibi depuis un vrai projet, installe-le en symlink
+(`npm i -D /chemin/vers/hachibi`) et lance avec `npx hachibi run …` : tes modifs du moteur sont
+prises en compte sans réinstaller.
 
 Le glossaire du domaine est dans [CONTEXT.md](CONTEXT.md), les décisions dans [docs/adr/](docs/adr/).
 

@@ -17,7 +17,10 @@ par **`npx tsx .hachibi/main.ts <issuesDir>`**. Le wrapper importe le moteur du 
 **Conséquences / contraintes** :
 
 - Le **bin** `hachibi` (pour `init`) reste du **JavaScript** : il est lancé par `node` depuis
-  `node_modules`, qui refuse le TS (cf. ADR 0001). Il se limite au scaffolding.
+  `node_modules`, qui refuse le TS (cf. ADR 0001). Il fournit `init`, `update` (refresh non
+  destructif via `.new`) et `run` — ce dernier lance le wrapper avec le `tsx` résolu depuis les
+  dépendances de hachibi, de sorte que le projet consommateur **n'a pas besoin de `tsx`** (cas
+  `npm link`/`file:`, où les deps du package lié ne sont pas hissées chez le consommateur).
 - Le wrapper `.hachibi/main.ts` **n'utilise ni top-level `await` ni `import.meta`** : selon le
   `type` du `package.json` du projet, tsx peut le transpiler en CJS, où ces deux constructions
   échouent. Le moteur résout donc lui-même `<repo>/.hachibi/{prompts,config.json}` par défaut.
