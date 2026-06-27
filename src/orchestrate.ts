@@ -139,37 +139,52 @@ function isDone(raw: string): boolean {
   return /\b(done|fait|termin\w*|complete\w*|closed|merged|int[ée]gr\w*)\b|✅|\[x\]/i.test(m[1]);
 }
 
-// Marque `## Status: done` dans les fichiers d'issues `files` (chemins absolus sous `root`),
-// au sein du worktree `intWt`, et commite. Renvoie le nombre d'issues effectivement marquées.
-export function markIssuesDone(intWt: string, root: string, files: string[]): number {
-  let marked = 0;
-  for (const file of files) {
+// Statuts d'avancement écrits par hachibi (mots-clés anglais). Seul `integrated` (et les
+// synonymes manuels reconnus par isDone) fait sauter l'issue au run suivant.
+export type IssueStatus = 'todo' | 'implemented' | 'integrated' | 'conflict' | 'failed';
+
+// Section `## Status` : ligne d'en-tête + lignes de corps non vides et non-titres.
+const STATUS_RE = /(^|\n)##[ \t]*Status\b[^\n]*(\n(?!#)[^\n]+)*/i;
+
+// Écrit `## Status\n<status>` (normalise une section existante, sinon en insère une juste après
+// le titre H1). Renvoie le nouveau contenu, ou null s'il est déjà exactement à cette valeur.
+export function setStatus(raw: string, status: string): string | null {
+  let out: string;
+  if (STATUS_RE.test(raw)) {
+    out = raw.replace(STATUS_RE, (_m, pre: string) => `${pre}## Status\n${status}`);
+  } else {
+    const lines = raw.split('\n');
+    const h1 = lines.findIndex((l) => /^#\s+/.test(l));
+    lines.splice(h1 >= 0 ? h1 + 1 : 0, 0, '', '## Status', status);
+    out = lines.join('\n');
+  }
+  return out === raw ? null : out;
+}
+
+// Statut d'aboutissement d'une issue après le run.
+function statusOf(r: WorkerResult, noMerge: boolean): IssueStatus {
+  if (r.reason === 'merge conflict') return 'conflict'; // implémenté mais merge KO
+  if (r.ok) return noMerge ? 'implemented' : 'integrated';
+  return 'failed';
+}
+
+// Écrit le statut de chaque issue dans le worktree intWt puis commite. Renvoie le nb de fichiers modifiés.
+export function applyIssueStatuses(intWt: string, root: string, entries: { file: string; status: string }[]): number {
+  let changed = 0;
+  for (const { file, status } of entries) {
     const rel = file.replace(root + '/', '');
     const target = join(intWt, rel);
     try {
-      const next = setStatusDone(readFileSync(target, 'utf8'));
+      const next = setStatus(readFileSync(target, 'utf8'), status);
       if (next !== null) {
         writeFileSync(target, next);
         git(`add "${rel}"`, intWt);
-        marked++;
+        changed++;
       }
     } catch { /* fichier absent dans l'intégration : on ignore */ }
   }
-  if (marked) git(`commit -m "chore(issues): marque ${marked} issue(s) done"`, intWt);
-  return marked;
-}
-
-// Renvoie le contenu avec `## Status: done`, ou null si déjà fait (rien à écrire).
-export function setStatusDone(raw: string): string | null {
-  if (isDone(raw)) return null;
-  // Section `## Status` existante → remplace son corps par "done".
-  const re = /(^|\n)(##\s*Status[^\n]*\n)[\s\S]*?(?=\n##\s|\n#\s|$)/i;
-  if (re.test(raw)) return raw.replace(re, (_m, pre, head) => `${pre}${head}done\n`);
-  // Sinon insère une section juste après le titre H1 (ou en tête de fichier).
-  const lines = raw.split('\n');
-  const h1 = lines.findIndex((l) => /^#\s+/.test(l));
-  lines.splice(h1 >= 0 ? h1 + 1 : 0, 0, '', '## Status', 'done');
-  return lines.join('\n');
+  if (changed) git('commit -m "chore(issues): mise à jour des statuts"', intWt);
+  return changed;
 }
 
 function parseBlockedBy(raw: string, selfNum: number, allNums: Set<number>): number[] {
@@ -490,7 +505,7 @@ Options :
   --base <ref>           Ref de base de la branche d'intégration (défaut HEAD)
   --integration <name>   Nom de la branche d'intégration (défaut auto)
   --no-merge             Ne fusionne pas automatiquement (laisse branches + worktrees)
-  --no-mark-done         Ne marque pas "## Status: done" les issues intégrées
+  --no-mark-done         N'écrit pas le statut (## Status) des issues après le run
   --keep-worktrees       Conserve les worktrees même en cas de succès
   --config <path>        Fichier de config JSON (défaut: .hachibi/config.json)
 
@@ -627,12 +642,19 @@ satisfaite). Pour de l'ad hoc, utilise plutôt --only / --skip.
     }
   }
 
-  // Marque `## Status: done` les issues intégrées — DANS la branche d'intégration (l'arbre
-  // principal n'est jamais touché). Les marqueurs arrivent quand tu fusionnes cette branche.
-  if (!values['no-merge'] && !values['no-mark-done']) {
-    const integrated = allResults.filter((r) => r.ok).map((r) => r.issue.file);
-    const marked = markIssuesDone(intWt, root, integrated);
-    if (marked) console.log(`\n🏁 ${marked} issue(s) marquée(s) \`## Status: done\` dans ${intBranch}.`);
+  // Écrit le statut d'aboutissement de chaque issue (implemented/integrated/conflict/failed)
+  // — DANS la branche d'intégration (l'arbre principal n'est jamais touché). Les statuts
+  // arrivent dans tes fichiers quand tu fusionnes cette branche.
+  if (!values['no-mark-done']) {
+    const noMerge = !!values['no-merge'];
+    const entries = allResults.map((r) => ({ file: r.issue.file, status: statusOf(r, noMerge) }));
+    const changed = applyIssueStatuses(intWt, root, entries);
+    if (changed) {
+      const counts: Record<string, number> = {};
+      for (const e of entries) counts[e.status] = (counts[e.status] ?? 0) + 1;
+      const summary = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(', ');
+      console.log(`\n🏁 Statuts écrits dans ${intBranch} : ${summary}.`);
+    }
   }
 
   // Rapport

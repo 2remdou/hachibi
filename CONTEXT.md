@@ -16,13 +16,20 @@ La section d'une issue qui déclare ses dépendances (les numéros d'autres issu
 doivent être terminées avant). Absence de section ou « none »/« aucun » = sans dépendance.
 _Avoid_: dependencies, depends-on, requires
 
-**Issue faite** (`## Status`):
-Une issue dont la section `## Status` vaut `done`/`fait`/`terminé` (ou `✅`/`[x]`). hachibi
-l'**écarte** de la sélection avant de planifier ; ses dépendants la traitent comme un bloqueur
-satisfait. hachibi **pose lui-même** ce marqueur sur les issues qu'il intègre (dans la branche
-d'intégration ; désactivable par `--no-mark-done`). À distinguer de `--skip` (écart ad hoc,
-non persistant) et du verdict **PASS** d'un worker (résultat d'un run, pas un état d'entrée).
-_Avoid_: done (en anglais dans la doc FR), terminée/fermée employées sans le marqueur
+**Statut** (`## Status`):
+L'état d'avancement d'une issue, écrit dans sa section `## Status`. Vocabulaire (anglais) :
+`todo`, `implemented` (worker fini — **la fin**), `integrated` (mergée — **l'intégration**),
+`conflict`, `failed`. hachibi l'**écrit lui-même** après le run, dans la branche d'intégration
+(désactivable par `--no-mark-done`).
+_Avoid_: done/fait employés comme valeur canonique (reconnus en lecture, mais la valeur écrite est `integrated`)
+
+**Issue faite** (skip):
+Une issue **sautée** au run suivant. Seul le statut `integrated` (et les synonymes manuels
+`done`/`fait`/`terminé`/`merged`/`✅`/`[x]`) le déclenche ; ses dépendants la traitent comme un
+bloqueur satisfait. À distinguer de `--skip` (écart ad hoc, non persistant), des statuts
+`implemented`/`conflict`/`failed` (informatifs, **rejoués**), et du verdict **PASS** d'un
+worker (résultat d'un run, pas un état d'entrée).
+_Avoid_: terminée/fermée employées sans le marqueur
 
 **Wave** (Vague):
 Un ensemble d'issues implémentables **en parallèle** sans se bloquer (dépendances) ni se

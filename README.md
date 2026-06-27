@@ -234,14 +234,13 @@ Un fichier par issue, nommé `NN-slug.md` (ex. `01-organisations-liste.md`). hac
 - Le **titre** : la première ligne `# ...`.
 - Les **dépendances** : la section `## Blocked by` (les numéros y sont extraits ;
   `none`/`aucun`/absence de section = aucune dépendance).
-- L'**état** (optionnel) : la section `## Status`. Si elle vaut `done`/`fait`/`terminé`
-  (ou `✅`, `[x]`), l'issue est **ignorée** — déjà faite. Exemple :
+- L'**état** (optionnel) : la section `## Status`. Exemple :
 
 ```markdown
 # Organisations — liste & détail
 
 ## Status
-done
+integrated
 
 ## Blocked by
 - 02 (schéma partagé)
@@ -250,21 +249,32 @@ done
 - ...
 ```
 
-### Reprendre un dossier où des issues sont déjà faites
+### Statuts d'avancement
 
-Par défaut hachibi traite **tous** les `NN-*.md` du dossier, **mais** il marque
-automatiquement `## Status: done` les issues qu'il intègre avec succès (voir ci-dessous). Pour
-qu'il en saute :
+hachibi **écrit lui-même** un statut d'aboutissement sur chaque issue après le run (sauf
+`--no-mark-done`). Vocabulaire :
 
-- **`## Status: done`** dans le fichier (persistant, versionné) — l'issue est ignorée, et ses
-  **dépendants la considèrent comme satisfaite** (le bloqueur écarté ne bloque plus).
-- **`--only 03,04`** / **`--skip 01,02`** — sélection ad hoc à l'exécution, sans toucher aux fichiers.
-- Sinon, le **workaround zéro-config** : sors/déplace les fichiers déjà faits hors du dossier visé.
+| Statut | Sens | Sauté au re-run ? |
+|--------|------|-------------------|
+| `todo` | pas commencée (ou absence de section) | non |
+| `implemented` | le worker a fini (commit vérifié sur sa branche) — **la fin**, pas encore mergée (cas `--no-merge`) | non |
+| `integrated` | fusionnée dans la branche d'intégration — **l'intégration** | **oui** |
+| `conflict` | implémentée mais le merge a échoué (à résoudre à la main) | non |
+| `failed` | le worker n'a pas produit de commit vérifié | non |
 
-**Marquage automatique.** À la fin d'un run, chaque issue **intégrée** est marquée
-`## Status: done` — **dans la branche d'intégration** (l'arbre principal n'est jamais touché).
-Les marqueurs arrivent donc dans tes fichiers **quand tu fusionnes cette branche** ; un run
-ultérieur les saute alors tout seul. Désactive avec `--no-mark-done`.
+> **Seul `integrated`** (et les synonymes manuels `done`/`fait`/`terminé`/`merged`/`✅`/`[x]`)
+> fait **sauter** l'issue au run suivant. `implemented`/`conflict`/`failed` sont informatifs et
+> **rejoués**. Un bloqueur `integrated` est traité comme satisfait par ses dépendants.
+
+### Où et quand les statuts sont écrits
+
+Les statuts sont écrits **dans la branche d'intégration** (l'arbre principal n'est jamais
+touché) : ils arrivent dans tes fichiers **quand tu fusionnes cette branche**, et un run
+ultérieur saute alors les `integrated`. Pour sauter des issues **avant** ça :
+
+- édite `## Status` à la main (ex. `integrated`/`done` après avoir résolu un `conflict`) ;
+- ou utilise **`--only 03,04`** / **`--skip 01,02`** (ad hoc, sans toucher aux fichiers) ;
+- ou sors/déplace les fichiers déjà faits hors du dossier visé (workaround zéro-config).
 
 ## Comment ça marche
 
